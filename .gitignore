@@ -114,3 +114,6 @@ venv.bak/
 
 # Models
 *.h5
+
+
+/test
