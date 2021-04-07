@@ -16,7 +16,7 @@ dict_path = '../models/chinese_L-12_H-768_A-12/vocab.txt'
 
 maxlen = 512
 batch_size = 8
-epochs = 10
+epochs = 3
 learning_rate = 1e-5  # bert_layers越小，学习率应该要越大
 
 main_labels = ['com.sqq.hy.music', 'com.sqq.hy.iptv', 'com.sqq.audiocontent']
@@ -79,18 +79,28 @@ class data_generator(DataGenerator):
 
 tokenizer = FullTokenizer(vocab_file=dict_path)
 
-fast_bert = build_model(config_path=config_path, checkpoint_path=checkpoint_path, model='fast_bert', labels_num=num_labels, return_keras_model=False)
+fast_bert = build_model(config_path=config_path, checkpoint_path=checkpoint_path, model='fast_bert',
+                        labels_num=num_labels, return_keras_model=False)
 # bert = build_model(config_path=config_path, checkpoint_path=checkpoint_path, model='bert', labels_num=num_labels, return_keras_model=False)
 
-output = Lambda(lambda x: x[:, 0])(fast_bert.model.output)
+# output = Lambda(lambda x: x[:, 0])(fast_bert.model.output)
+# output = Dense(
+#     units=num_labels,
+#     activation='softmax',
+#     kernel_initializer=fast_bert.initializer
+# )(output)
+#
+# model = Model(fast_bert.model.input, output)
+
 output = Dense(
     units=num_labels,
     activation='softmax',
     kernel_initializer=fast_bert.initializer
-)(output)
+)(fast_bert.output)
 
-model = keras.models.Model(fast_bert.model.input, output)
+model = Model(fast_bert.model.input, output)
 
+# model = Model(fast_bert.input, fast_bert.output)
 model.summary()
 
 
@@ -110,7 +120,7 @@ def cross_entropy(y_true, y_pred):
         cross_entropy = K.sparse_categorical_crossentropy(y_true, y_pred)
     else:
         # 如果是蒸馏
-        teacher_probs = K.softmax(y_true[0])
+        teacher_probs = K.softmax(y_true[-1])
         loss = 0
         for i in range(len(y_true) - 1):
             student_logits = y_true[i+1]
@@ -135,7 +145,7 @@ def recognize(text):
 
     input_ids = tokenizer.convert_tokens_to_ids(tokens)
     segment_ids = [0] * len(input_ids)
-    x = model.predict([input_ids, segment_ids])
+    # x = model.predict([input_ids, segment_ids])
     output = model.predict([input_ids, segment_ids])[0]
     label_ret = convert_id_to_label(output)
     return label_ret
@@ -201,3 +211,30 @@ model.fit(
     # callbacks=[evaluator]
     callbacks=[cp_callback,evaluator]
 )
+
+
+
+
+
+
+###### 下面是蒸馏训练
+checkpoint_path = "./output/cp-0003.ckpt"
+fast_bert_class = build_model(config_path=config_path, checkpoint_path=checkpoint_path,
+                              model='fast_bert', labels_num=num_labels,
+                              return_keras_model=False, distillate_or_not=True)
+# bert = build_model(config_path=config_path, checkpoint_path=checkpoint_path, model='bert', labels_num=num_labels, return_keras_model=False)
+
+# output = Lambda(lambda x: x[:, 0])(fast_bert.model.output)
+# output = Dense(
+#     units=num_labels,
+#     activation='softmax',
+#     kernel_initializer=fast_bert.initializer
+# )(output)
+#
+# model = Model(fast_bert.model.input, output)
+
+
+model = Model(fast_bert_class.model.input, fast_bert_class.model.output)
+
+# model = Model(fast_bert.input, fast_bert.output)
+model.summary()

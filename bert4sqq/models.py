@@ -281,7 +281,7 @@ class Transformer(object):
         return {}
 
     def load_weights_from_checkpoint(self, checkpoint, mapping=None):
-        """根据mapping从checkpoint加载权重
+        """根据mapping从checkpoint加载bert权重
         """
         mapping = mapping or self.variable_mapping()
         mapping = {self.prefixed(k): v for k, v in mapping.items()}
@@ -1067,13 +1067,15 @@ class FAST_BERT(Transformer):
         # )
 
         if self.pooling == "mean":
+            # 这里可能有问题
             x = K.mean(x, dim=-1)
         elif self.pooling == "max":
+            # 这里可能有问题
             x = K.max(x, dim=1)[0]
         elif self.pooling == "last":
-            x = x[:, -1, :]
+            x = Lambda(lambda y: y[:, -1, :])(x)
         else:
-            x = x[:, 0, :]
+            x = Lambda(lambda y: y[:, 0, :])(x)
 
         x = self.apply(
             inputs=x,
@@ -1118,7 +1120,7 @@ class FAST_BERT(Transformer):
     def load_variable(self, checkpoint, name):
         """加载单个变量的函数
         """
-        variable = super(BERT, self).load_variable(checkpoint, name)
+        variable = super(FAST_BERT, self).load_variable(checkpoint, name)
         if name in [
             'bert/embeddings/word_embeddings',
             'cls/predictions/output_bias',
@@ -1134,7 +1136,7 @@ class FAST_BERT(Transformer):
         """
         if name == 'cls/seq_relationship/output_weights':
             value = value.T
-        return super(BERT, self).create_variable(name, value, dtype)
+        return super(FAST_BERT, self).create_variable(name, value, dtype)
 
     def variable_mapping(self):
         """映射到官方BERT权重格式
