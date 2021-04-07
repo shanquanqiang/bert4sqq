@@ -4,7 +4,7 @@ from bert4sqq.tokenizers import FullTokenizer
 from bert4sqq.snippets import sequence_padding, DataGenerator
 from keras.models import Model
 from keras.optimizers import Adam
-from keras.layers import Dense
+from keras.layers import Lambda, Dense
 import tensorflow as tf
 from scipy import stats
 import os
@@ -31,6 +31,18 @@ def load_data(data_dir):
             lines.append(line)
     return lines
 
+def convert_id_to_label(pred_ids_result):
+    max_probabilities = -1
+    max_id = 0
+    for i, probabilities in enumerate(pred_ids_result):
+        if max_probabilities < probabilities:
+            max_probabilities = probabilities
+            max_id = i
+    # if max_probabilities < 0.5:
+    #     curr_label = const.UNKNOWN_DOMAIN
+    # else:
+    curr_label = id2label[max_id]
+    return curr_label
 
 train_data = load_data('./input')
 total_length = len(train_data)
@@ -67,11 +79,17 @@ class data_generator(DataGenerator):
 
 tokenizer = FullTokenizer(vocab_file=dict_path)
 
-# model = build_model(config_path=config_path, checkpoint_path=checkpoint_path, model='fast_bert', labels_num=num_labels)
-model = build_model(config_path=config_path, checkpoint_path=checkpoint_path, model='bert', labels_num=num_labels)
+fast_bert = build_model(config_path=config_path, checkpoint_path=checkpoint_path, model='fast_bert', labels_num=num_labels, return_keras_model=False)
+# bert = build_model(config_path=config_path, checkpoint_path=checkpoint_path, model='bert', labels_num=num_labels, return_keras_model=False)
 
-output = Dense(num_labels)(model.output)
-model = Model(model.input, output)
+output = Lambda(lambda x: x[:, 0])(fast_bert.model.output)
+output = Dense(
+    units=num_labels,
+    activation='softmax',
+    kernel_initializer=fast_bert.initializer
+)(output)
+
+model = keras.models.Model(fast_bert.model.input, output)
 
 model.summary()
 
@@ -104,10 +122,11 @@ def cross_entropy(y_true, y_pred):
 
 
 model.compile(
-    # loss=cross_entropy,
-    loss='sparse_categorical_crossentropy',
+    loss=cross_entropy,
+    # loss='sparse_categorical_crossentropy',
     optimizer=Adam(learning_rate),
-    metrics=['sparse_categorical_accuracy'],
+    # metrics=['sparse_categorical_accuracy'],
+    metrics=[cross_entropy],
 )
 
 
@@ -116,7 +135,10 @@ def recognize(text):
 
     input_ids = tokenizer.convert_tokens_to_ids(tokens)
     segment_ids = [0] * len(input_ids)
+    x = model.predict([input_ids, segment_ids])
     output = model.predict([input_ids, segment_ids])[0]
+    label_ret = convert_id_to_label(output)
+    return label_ret
 
 
 
@@ -149,7 +171,7 @@ class Evaluator(keras.callbacks.Callback):
         # 保存最优
         if f1 >= self.best_val_f1:
             self.best_val_f1 = f1
-            model.save_weights('./best_model.weights')
+            # model.save_weights('./best_model.weights')
         print(
             'valid:  f1: %.5f, precision: %.5f, recall: %.5f, best f1: %.5f\n' %
             (f1, precision, recall, self.best_val_f1)
@@ -164,9 +186,18 @@ class Evaluator(keras.callbacks.Callback):
 evaluator = Evaluator()
 train_generator = data_generator(train_data, batch_size)
 
+checkpoint_path = "./output/cp-{epoch:04d}.ckpt"
+checkpoint_dir = os.path.dirname(checkpoint_path)
+
+# 创建callback来保存模型的权重
+cp_callback = tf.keras.callbacks.ModelCheckpoint(filepath=checkpoint_path,
+                                                 save_weights_only=True,
+                                                 verbose=1)
+
 model.fit(
     train_generator.forfit(),
     steps_per_epoch=len(train_generator),
     epochs=epochs,
-    callbacks=[evaluator]
+    # callbacks=[evaluator]
+    callbacks=[cp_callback,evaluator]
 )
