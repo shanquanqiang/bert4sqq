@@ -11,6 +11,7 @@ import numpy as np
 from scipy import stats
 from tqdm import tqdm
 import os
+import random
 
 ###### 下面是蒸馏训练
 
@@ -108,6 +109,7 @@ test_length = int(total_length * 5 / 100)
 valid_data = train_data[:test_length]
 train_data = train_data[test_length:]
 test_data = valid_data
+random.shuffle(train_data)
 
 
 def get_layer_output(model, x, index=-1):

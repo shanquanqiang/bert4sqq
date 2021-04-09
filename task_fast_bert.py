@@ -9,6 +9,7 @@ from scipy import stats
 import os
 from tqdm import tqdm
 from keras.callbacks import ModelCheckpoint
+import random
 
 config_path = '../models/chinese_L-12_H-768_A-12/bert_config.json'
 checkpoint_path = '../models/chinese_L-12_H-768_A-12/bert_model.ckpt'
@@ -19,7 +20,7 @@ checkpoint_save_path = "./output/cp-{epoch:04d}.ckpt"
 maxlen = 512
 batch_size = 8
 epochs = 1
-learning_rate = 1e-5  # bert_layers越小，学习率应该要越大
+learning_rate = 5e-5  # bert_layers越小，学习率应该要越大
 
 main_labels = ['com.sqq.hy.music', 'com.sqq.hy.iptv', 'com.sqq.audiocontent']
 id2label = dict(enumerate(main_labels))
@@ -53,6 +54,7 @@ test_length = int(total_length * 5 / 100)
 valid_data = train_data[:test_length]
 train_data = train_data[test_length:]
 test_data = valid_data
+random.shuffle(train_data)
 
 
 class data_generator(DataGenerator):
@@ -78,6 +80,33 @@ class data_generator(DataGenerator):
                 batch_labels = sequence_padding(batch_labels)
                 yield [batch_token_ids, batch_segment_ids], batch_labels
                 batch_token_ids, batch_segment_ids, batch_labels = [], [], []
+
+
+def kl_for_log_probs(log_p, log_q):
+    log_p_n = K.eval(log_p)
+    log_q_n = K.eval(log_q)
+    KL = stats.entropy(log_p_n, log_q_n, axis=-1)
+    kl = K.mean(K.constant(KL), axis=0)
+    return kl
+
+
+def cross_entropy(y_true, y_pred):
+    """计算fast_bert的loss
+    """
+    # if not isinstance(y_true, list):
+    #     # 如果是正常训练
+    cross_entropy = K.sparse_categorical_crossentropy(y_true, y_pred)
+    # else:
+    #     # 如果是蒸馏
+    #     teacher_probs = K.softmax(y_true[-1])
+    #     loss = 0
+    #     for i in range(len(y_true) - 1):
+    #         student_logits = y_true[i+1]
+    #         # student_probs = K.log(K.softmax(student_logits))
+    #         student_probs = tf.nn.log_softmax(student_logits, axis=-1)
+    #         # 需要实现连续分布的KL散度
+    #         loss += kl_for_log_probs(student_probs, teacher_probs)
+    return cross_entropy
 
 
 tokenizer = FullTokenizer(vocab_file=dict_path)
@@ -108,31 +137,6 @@ model = Model(fast_bert.model.input, output)
 model.summary()
 
 
-def kl_for_log_probs(log_p, log_q):
-    log_p_n = K.eval(log_p)
-    log_q_n = K.eval(log_q)
-    KL = stats.entropy(log_p_n, log_q_n, axis=-1)
-    kl = K.mean(K.constant(KL), axis=0)
-    return kl
-
-
-def cross_entropy(y_true, y_pred):
-    """计算fast_bert的loss
-    """
-    # if not isinstance(y_true, list):
-    #     # 如果是正常训练
-    cross_entropy = K.sparse_categorical_crossentropy(y_true, y_pred)
-    # else:
-    #     # 如果是蒸馏
-    #     teacher_probs = K.softmax(y_true[-1])
-    #     loss = 0
-    #     for i in range(len(y_true) - 1):
-    #         student_logits = y_true[i+1]
-    #         # student_probs = K.log(K.softmax(student_logits))
-    #         student_probs = tf.nn.log_softmax(student_logits, axis=-1)
-    #         # 需要实现连续分布的KL散度
-    #         loss += kl_for_log_probs(student_probs, teacher_probs)
-    return cross_entropy
 
 
 model.compile(
@@ -140,7 +144,7 @@ model.compile(
     # loss='sparse_categorical_crossentropy',
     optimizer=Adam(learning_rate),
     # metrics=['sparse_categorical_accuracy'],
-    metrics=[cross_entropy],
+    # metrics=[cross_entropy],
 )
 
 
