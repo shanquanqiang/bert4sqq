@@ -8,7 +8,6 @@ import tensorflow as tf
 from keras.models import Model
 from keras.optimizers import Adam
 import numpy as np
-from scipy import stats
 from tqdm import tqdm
 import os
 import random
@@ -46,16 +45,6 @@ def load_data(data_dir):
         for (i, line) in enumerate(f):
             lines.append(line)
     return lines
-
-
-def entropy(output_probs):
-    # 熵越大则不确定性越大
-    # 计算概率分布
-    probs = tf.nn.softmax(output_probs)
-    probs_n = K.eval(probs)
-    # 计算底数为base的熵
-    en = stats.entropy(probs_n, base=num_labels)
-    return en
 
 
 def lo(x):

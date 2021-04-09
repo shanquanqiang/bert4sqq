@@ -8,6 +8,7 @@ import numpy as np
 from bert4sqq.layers import *
 from bert4sqq.snippets import is_string
 from keras.models import Model
+from scipy import stats
 
 
 class Transformer(object):
@@ -738,6 +739,8 @@ class FAST_BERT(Transformer):
             cla_attention_key_size=None,
             pooling='first',
             distillate_or_not=False,
+            predict=False,
+            speed=0.5,  # 不确定度阈值，如果如果预测结果熵小于此阈值则表示此结果可信。熵越大则不确定性越大,则结果越可能是错的
             **kwargs  # 其余参数
     ):
         super(FAST_BERT, self).__init__(**kwargs)
@@ -761,7 +764,43 @@ class FAST_BERT(Transformer):
         self.distillate_or_not = distillate_or_not
         # self.layer_trainable = False if self.distillate_or_not is True else True
         self.layer_trainable = True
-        self.hidden_list = []
+        # self.hidden_list = []
+        self.predict = predict
+        self.speed = speed
+
+    def call(self, inputs):
+        """定义模型的执行流程
+        """
+        # Embedding
+        outputs = self.apply_embeddings(inputs)
+        # Main
+        distill = []
+        for i in range(self.num_hidden_layers):
+            outputs = self.apply_main_layers(outputs, i)
+            if self.distillate_or_not:
+                # 如果是蒸馏就在每一层transformer后面加classifier层
+                x = self.apply_distill_classifier_layer(outputs, i, True)
+                if self.predict:
+                    # 如果是预测
+                    probs = self.entropy(x)
+                    if probs < self.speed:
+                        # 如果熵比较小，则认为预测结果可信
+                        outputs = x
+                        break
+                else:
+                    # 如果不是预测，则将此结果也输出
+                    distill.append(x)
+            else:
+                # 如果不是蒸馏正常添加最后一层classifier
+                if i == self.num_hidden_layers - 1:
+                    outputs = self.apply_distill_classifier_layer(outputs, i, True)
+        if distill:
+            outputs = distill
+
+        if len(outputs) == 1:
+            outputs = outputs[0]
+
+        return outputs
 
     def get_inputs(self):
         """FAST BERT的输入是token_ids和segment_ids
@@ -959,28 +998,9 @@ class FAST_BERT(Transformer):
             layer_trainable=self.layer_trainable
         )
 
-        if self.distillate_or_not:
-            # 如果是蒸馏就记录下每一层的计算结果
-            self.hidden_list.append(x)
-
         return x
 
-    def apply_final_layers(self, inputs):
-        x = self.apply_classifier_layer(inputs, self.num_hidden_layers - 1, self.layer_trainable)
-        outputs = [x]
-        if self.distillate_or_not:
-
-            # 蒸馏出前11层，每层的classifier
-            for i in range(self.num_hidden_layers - 1):
-                x = self.apply_classifier_layer(self.hidden_list[i], i, True)
-                outputs.append(x)
-
-        if len(outputs) == 1:
-            outputs = outputs[0]
-
-        return outputs
-
-    def apply_classifier_layer(self, inputs, index, layer_trainable):
+    def apply_distill_classifier_layer(self, inputs, index, layer_trainable):
         """ hidden_size = 128 heads_num = 2
         """
         z = self.layer_norm_conds[0]
@@ -1039,35 +1059,6 @@ class FAST_BERT(Transformer):
             layer_trainable=layer_trainable
         )
 
-        # Feed Forward
-        # xi = x
-        # x = self.apply(
-        #     inputs=x,
-        #     layer=FeedForward,
-        #     units=self.intermediate_size,
-        #     activation=self.hidden_act,
-        #     kernel_initializer=self.initializer,
-        #     name=feed_forward_name
-        # )
-        # x = self.apply(
-        #     inputs=x,
-        #     layer=Dropout,
-        #     rate=self.dropout_rate,
-        #     name='%s-Dropout' % feed_forward_name
-        # )
-        # x = self.apply(
-        #     inputs=[xi, x], layer=Add, name='%s-Add' % feed_forward_name
-        # )
-        # x = self.apply(
-        #     inputs=self.simplify([x, z]),
-        #     layer=LayerNormalization,
-        #     conditional=(z is not None),
-        #     hidden_units=self.layer_norm_conds[1],
-        #     hidden_activation=self.layer_norm_conds[2],
-        #     hidden_initializer=self.initializer,
-        #     name='%s-Norm' % feed_forward_name
-        # )
-
         if self.pooling == "mean":
             # 这里可能有问题
             x = K.mean(x, dim=-1)
@@ -1119,6 +1110,15 @@ class FAST_BERT(Transformer):
             outputs = outputs[1:]
 
         return outputs
+
+    def entropy(self, output):
+        # 熵越大则不确定性越大
+        # 计算概率分布
+        probs = tf.nn.softmax(output)
+        probs_n = K.eval(probs)
+        # 计算底数为base的熵
+        en = stats.entropy(probs_n, base=self.labels_num)
+        return en
 
     def load_variable(self, checkpoint, name):
         """加载单个变量的函数
