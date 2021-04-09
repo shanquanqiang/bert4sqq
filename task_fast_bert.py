@@ -14,6 +14,7 @@ config_path = '../models/chinese_L-12_H-768_A-12/bert_config.json'
 checkpoint_path = '../models/chinese_L-12_H-768_A-12/bert_model.ckpt'
 dict_path = '../models/chinese_L-12_H-768_A-12/vocab.txt'
 input_data_path = './input'
+checkpoint_save_path = "./output/cp-{epoch:04d}.ckpt"
 
 maxlen = 512
 batch_size = 8
@@ -202,11 +203,8 @@ class Evaluator(keras.callbacks.Callback):
 evaluator = Evaluator(model)
 train_generator = data_generator(train_data, batch_size)
 
-checkpoint_path = "./output/cp-{epoch:04d}.ckpt"
-checkpoint_dir = os.path.dirname(checkpoint_path)
-
 # 创建callback来保存模型的权重
-cp_callback = ModelCheckpoint(filepath=checkpoint_path,
+cp_callback = ModelCheckpoint(filepath=checkpoint_save_path,
                               save_weights_only=True,
                               verbose=1)
 
