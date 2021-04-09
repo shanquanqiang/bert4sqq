@@ -759,7 +759,8 @@ class FAST_BERT(Transformer):
         self.cla_attention_key_size = cla_attention_key_size or self.cla_attention_head_size
         self.pooling = pooling
         self.distillate_or_not = distillate_or_not
-        self.layer_trainable = False if self.distillate_or_not is True else True
+        # self.layer_trainable = False if self.distillate_or_not is True else True
+        self.layer_trainable = True
         self.hidden_list = []
 
     def get_inputs(self):
@@ -1034,7 +1035,8 @@ class FAST_BERT(Transformer):
             hidden_units=self.layer_norm_conds[1],
             hidden_activation=self.layer_norm_conds[2],
             hidden_initializer=self.initializer,
-            name='%s-Norm' % cla_attention_name
+            name='%s-Norm' % cla_attention_name,
+            layer_trainable=layer_trainable
         )
 
         # Feed Forward
@@ -1103,7 +1105,8 @@ class FAST_BERT(Transformer):
             hidden_units=self.layer_norm_conds[1],
             hidden_activation=self.layer_norm_conds[2],
             hidden_initializer=self.initializer,
-            name='Classifier-%s-Norm' % cla_attention_name
+            name='Classifier-%s-Norm' % cla_attention_name,
+            layer_trainable=layer_trainable
         )
 
         outputs.append(x)
@@ -1121,6 +1124,7 @@ class FAST_BERT(Transformer):
         """加载单个变量的函数
         """
         variable = super(FAST_BERT, self).load_variable(checkpoint, name)
+
         if name in [
             'bert/embeddings/word_embeddings',
             'cls/predictions/output_bias',
@@ -1242,8 +1246,12 @@ def build_model(
     model_in_using = chosen_model(**configs)
     model_in_using.build(**configs)
 
+    distillate_or_not = configs.get('distillate_or_not', False)
     if checkpoint_path is not None:
-        model_in_using.load_weights_from_checkpoint(checkpoint_path)
+        if distillate_or_not is False:
+            model_in_using.load_weights_from_checkpoint(checkpoint_path)
+        else:
+            model_in_using.model.load_weights(checkpoint_path, by_name=True)
 
     if return_keras_model:
         return model_in_using.model
