@@ -761,11 +761,12 @@ class FAST_BERT(Transformer):
         self.cla_attention_head_size = cla_attention_head_size or self.cla_hidden_size // self.cla_heads_num
         self.cla_attention_key_size = cla_attention_key_size or self.cla_attention_head_size
         self.pooling = pooling
+        # self.predict = predict
         self.distillate_or_not = distillate_or_not
+        # self.distillate_or_not = self.predict if self.predict else distillate_or_not
         # self.layer_trainable = False if self.distillate_or_not is True else True
         self.layer_trainable = True
         # self.hidden_list = []
-        self.predict = predict
         self.speed = speed
 
     def call(self, inputs):
@@ -780,25 +781,26 @@ class FAST_BERT(Transformer):
             if self.distillate_or_not:
                 # 如果是蒸馏就在每一层transformer后面加classifier层
                 x = self.apply_distill_classifier_layer(outputs, i, True)
-                if self.predict:
-                    # 如果是预测
-                    probs = self.entropy(x)
-                    if probs < self.speed:
-                        # 如果熵比较小，则认为预测结果可信
-                        outputs = x
-                        break
-                else:
-                    # 如果不是预测，则将此结果也输出
-                    distill.append(x)
+                # if self.predict:
+                #     # 如果是预测
+                #     probs = self.entropy(x)
+                #     ss = tf.less(probs, tf.constant(self.speed, dtype=tf.float32))
+                #     if ss is True:
+                #         # 如果熵比较小，则认为预测结果可信
+                #         outputs = x
+                #         break
+                # else:
+                #     # 如果不是预测，则将此结果也输出
+                distill.append(x)
             else:
                 # 如果不是蒸馏正常添加最后一层classifier
                 if i == self.num_hidden_layers - 1:
                     outputs = self.apply_distill_classifier_layer(outputs, i, True)
         if distill:
             outputs = distill
-
-        if len(outputs) == 1:
-            outputs = outputs[0]
+        #
+        # if len(outputs) == 1:
+        #     outputs = outputs[0]
 
         return outputs
 
@@ -1115,10 +1117,11 @@ class FAST_BERT(Transformer):
         # 熵越大则不确定性越大
         # 计算概率分布
         probs = tf.nn.softmax(output)
-        probs_n = K.eval(probs)
-        # 计算底数为base的熵
-        en = stats.entropy(probs_n, base=self.labels_num)
-        return en
+        # probs_n = K.eval(probs)
+        # # 计算底数为base的熵
+        # en = stats.entropy(probs_n, base=self.labels_num)
+        # return en
+        return tf.constant(6, dtype=tf.float32)
 
     def load_variable(self, checkpoint, name):
         """加载单个变量的函数
@@ -1247,6 +1250,8 @@ def build_model(
     model_in_using.build(**configs)
 
     distillate_or_not = configs.get('distillate_or_not', False)
+    # predict = configs.get('predict', False)
+    # distillate_or_not = predict if predict else distillate_or_not
     if checkpoint_path is not None:
         if distillate_or_not is False:
             model_in_using.load_weights_from_checkpoint(checkpoint_path)
