@@ -1,12 +1,18 @@
+# coding=utf-8
+
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 from bert4sqq.models import build_model
 from bert4sqq.backend import keras, K
 from bert4sqq.tokenizers import FullTokenizer
 from bert4sqq.snippets import sequence_padding, DataGenerator
+from bert4sqq.utils import get_labels, load_data
 from keras.models import Model
 from keras.optimizers import Adam
 from keras.layers import Dense
 from scipy import stats
-import os
 from tqdm import tqdm
 from keras.callbacks import ModelCheckpoint
 import random
@@ -16,24 +22,18 @@ checkpoint_path = '../models/chinese_L-12_H-768_A-12/bert_model.ckpt'
 dict_path = '../models/chinese_L-12_H-768_A-12/vocab.txt'
 input_data_path = './input'
 checkpoint_save_path = "./output/cp-{epoch:04d}.ckpt"
+output_dir = './output'
+file_name = 'train-domain.txt'
 
 maxlen = 512
 batch_size = 8
 epochs = 1
 learning_rate = 5e-5  # bert_layers越小，学习率应该要越大
 
-main_labels = ['com.sqq.hy.music', 'com.sqq.hy.iptv', 'com.sqq.audiocontent']
+main_labels = get_labels(input_data_path, output_dir, file_name)
 id2label = dict(enumerate(main_labels))
 label2id = {j: i for i, j in id2label.items()}
 num_labels = len(main_labels)
-
-
-def load_data(data_dir):
-    lines = []
-    with open(os.path.join(data_dir, 'train-domain.txt'), encoding='utf-8') as f:
-        for (i, line) in enumerate(f):
-            lines.append(line)
-    return lines
 
 
 def convert_id_to_label(pred_ids_result):
@@ -47,12 +47,12 @@ def convert_id_to_label(pred_ids_result):
     return curr_label
 
 
-train_data = load_data(input_data_path)
+train_data = load_data(input_data_path, file_name)
 total_length = len(train_data)
 test_length = int(total_length * 5 / 100)
 
 valid_data = train_data[:test_length]
-train_data = train_data[test_length:]
+# train_data = train_data[test_length:]
 test_data = valid_data
 random.shuffle(train_data)
 
@@ -135,9 +135,6 @@ model = Model(fast_bert.model.input, output)
 
 # model = Model(fast_bert.input, fast_bert.output)
 model.summary()
-
-
-
 
 model.compile(
     loss=cross_entropy,

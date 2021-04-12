@@ -1,3 +1,9 @@
+# coding=utf-8
+
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
+
 from bert4sqq.models import build_model
 from bert4sqq.backend import keras, K
 from bert4sqq.tokenizers import FullTokenizer
@@ -7,8 +13,7 @@ from keras.layers import Lambda
 import tensorflow as tf
 from keras.models import Model
 from keras.optimizers import Adam
-import numpy as np
-from tqdm import tqdm
+from bert4sqq.utils import get_labels2id, load_data
 import os
 import random
 from keras.callbacks import ModelCheckpoint
@@ -20,6 +25,8 @@ checkpoint_path = '../models/chinese_L-12_H-768_A-12/bert_model.ckpt'
 dict_path = '../models/chinese_L-12_H-768_A-12/vocab.txt'
 input_data_path = './input'
 checkpoint_save_path = "./output/distill-{epoch:04d}.ckpt"
+labels_dir = './output'
+file_name = 'train-domain.txt'
 
 maxlen = 512
 batch_size = 8
@@ -29,24 +36,15 @@ speed = 0.5
 
 checkpoint_path = './output/cp-0001.ckpt'
 
-main_labels = ['com.sqq.hy.music', 'com.sqq.hy.iptv', 'com.sqq.audiocontent']
-id2label = dict(enumerate(main_labels))
-label2id = {j: i for i, j in id2label.items()}
-num_labels = len(main_labels)
+label2id = get_labels2id(labels_dir)
+id2label = {value: key for key, value in label2id.items()}
+num_labels = len(id2label)
 
 tokenizer = FullTokenizer(vocab_file=dict_path)
 
 fast_bert_class_model = build_model(config_path=config_path, checkpoint_path=checkpoint_path,
                                     model='fast_bert', labels_num=num_labels,
                                     distillate_or_not=True)
-
-
-def load_data(data_dir):
-    lines = []
-    with open(os.path.join(data_dir, 'train-domain.txt'), encoding='utf-8') as f:
-        for (i, line) in enumerate(f):
-            lines.append(line)
-    return lines
 
 
 def lo(x):
@@ -98,13 +96,7 @@ fast_bert_class_model.compile(
     # metrics=[lambda y_true,y_pred: y_pred],
 )
 
-train_data = load_data(input_data_path)
-total_length = len(train_data)
-test_length = int(total_length * 5 / 100)
-
-valid_data = train_data[:test_length]
-train_data = train_data[test_length:]
-test_data = valid_data
+train_data = load_data(input_data_path, file_name)
 random.shuffle(train_data)
 
 
@@ -230,7 +222,6 @@ class c_data_generator(DataGenerator):
 
 
 train_generator = c_data_generator(train_data, batch_size)
-
 
 cp_callback = ModelCheckpoint(filepath=checkpoint_save_path,
                               save_weights_only=True,
