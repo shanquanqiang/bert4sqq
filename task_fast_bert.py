@@ -26,10 +26,11 @@ input_data_path = './input'
 checkpoint_save_path = "./output/cp-{epoch:04d}.ckpt"
 output_dir = './output'
 file_name = 'train-domain.txt'
+test_file_name = 'dev-domain.txt'
 
 maxlen = 512
 batch_size = 64
-epochs = 10
+epochs = 20
 learning_rate = 5e-5  # bert_layers越小，学习率应该要越大
 
 main_labels = get_labels(input_data_path, output_dir, file_name)
@@ -50,12 +51,8 @@ def convert_id_to_label(pred_ids_result):
 
 
 train_data = load_data(input_data_path, file_name)
-total_length = len(train_data)
-test_length = int(total_length * 5 / 100)
 
-valid_data = train_data[:test_length]
-# train_data = train_data[test_length:]
-test_data = valid_data
+test_data = load_data(input_data_path, test_file_name)
 # random.shuffle(train_data)
 
 
@@ -160,21 +157,22 @@ class Evaluator(keras.callbacks.Callback):
         self.save_model = save_model
 
     def on_epoch_end(self, epoch, logs=None):
-        f1, precision, recall = evaluate(valid_data, self.eval_model)
-        # 保存最优
-        if f1 >= self.best_val_f1:
-            self.best_val_f1 = f1
-            if self.save_model:
-                self.eval_model.save_weights('./output/best_model.weights')
-        print(
-            'valid:  f1: %.5f, precision: %.5f, recall: %.5f, best f1: %.5f\n' %
-            (f1, precision, recall, self.best_val_f1)
-        )
-        f1, precision, recall = evaluate(test_data, self.eval_model)
-        print(
-            'test:  f1: %.5f, precision: %.5f, recall: %.5f\n' %
-            (f1, precision, recall)
-        )
+        if epoch % 10 == 0:
+            f1, precision, recall = evaluate(test_data, self.eval_model)
+            # 保存最优
+            if f1 >= self.best_val_f1:
+                self.best_val_f1 = f1
+                if self.save_model:
+                    self.eval_model.save_weights('./output/best_model.weights')
+            print(
+                'test:  f1: %.5f, precision: %.5f, recall: %.5f, best f1: %.5f\n' %
+                (f1, precision, recall, self.best_val_f1)
+            )
+            # f1, precision, recall = evaluate(test_data, self.eval_model)
+            # print(
+            #     'test:  f1: %.5f, precision: %.5f, recall: %.5f\n' %
+            #     (f1, precision, recall)
+            # )
 
 
 evaluator = Evaluator(model)
@@ -183,7 +181,8 @@ train_generator = data_generator(train_data, batch_size)
 # 创建callback来保存模型的权重
 cp_callback = ModelCheckpoint(filepath=checkpoint_save_path,
                               save_weights_only=True,
-                              verbose=1)
+                              verbose=1,
+                              period=5)
 
 model.fit(
     train_generator.forfit(),
