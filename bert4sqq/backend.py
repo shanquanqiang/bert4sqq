@@ -57,6 +57,35 @@ def set_gelu(version):
         keras.utils.get_custom_objects()['gelu'] = gelu_tanh
 
 
+
+def piecewise_linear(t, schedule):
+    """分段线性函数
+    其中schedule是形如{1000: 1, 2000: 0.1}的字典，
+    表示 t ∈ [0, 1000]时，输出从0均匀增加至1，而
+    t ∈ [1000, 2000]时，输出从1均匀降低到0.1，最后
+    t > 2000时，保持0.1不变。
+    """
+    schedule = sorted(schedule.items())
+    if schedule[0][0] != 0:
+        schedule = [(0, 0.0)] + schedule
+
+    x = K.constant(schedule[0][1], dtype=K.floatx())
+    t = K.cast(t, K.floatx())
+    for i in range(len(schedule)):
+        t_begin = schedule[i][0]
+        x_begin = x
+        if i != len(schedule) - 1:
+            dx = schedule[i + 1][1] - schedule[i][1]
+            dt = schedule[i + 1][0] - schedule[i][0]
+            slope = 1.0 * dx / dt
+            x = schedule[i][1] + slope * (t - t_begin)
+        else:
+            x = K.constant(schedule[i][1], dtype=K.floatx())
+        x = K.switch(t >= t_begin, x, x_begin)
+
+    return x
+
+
 def sequence_masking(x, mask, mode=0, axis=None):
     """为序列条件mask的函数
     mask: 形如(batch_size, seq_len)的0-1矩阵；

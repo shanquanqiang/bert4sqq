@@ -9,13 +9,15 @@ from bert4sqq.backend import keras, K
 from bert4sqq.tokenizers import FullTokenizer
 from bert4sqq.snippets import sequence_padding, DataGenerator
 from bert4sqq.utils import get_labels, load_data
+from bert4sqq.optimizers import Adam
 from keras.models import Model
-from keras.optimizers import Adam
 from keras.layers import Dense
 from scipy import stats
 from tqdm import tqdm
 from keras.callbacks import ModelCheckpoint
 import random
+import tensorflow as tf
+from keras.utils.np_utils import to_categorical
 
 config_path = '../models/chinese_L-12_H-768_A-12/bert_config.json'
 checkpoint_path = '../models/chinese_L-12_H-768_A-12/bert_model.ckpt'
@@ -26,8 +28,8 @@ output_dir = './output'
 file_name = 'train-domain.txt'
 
 maxlen = 512
-batch_size = 8
-epochs = 1
+batch_size = 64
+epochs = 10
 learning_rate = 5e-5  # bert_layers越小，学习率应该要越大
 
 main_labels = get_labels(input_data_path, output_dir, file_name)
@@ -54,7 +56,7 @@ test_length = int(total_length * 5 / 100)
 valid_data = train_data[:test_length]
 # train_data = train_data[test_length:]
 test_data = valid_data
-random.shuffle(train_data)
+# random.shuffle(train_data)
 
 
 class data_generator(DataGenerator):
@@ -70,6 +72,7 @@ class data_generator(DataGenerator):
             tokens = tokenizer.tokenize(input_str)
             token_ids = tokenizer.convert_tokens_to_ids(tokens)
             segment_ids = [0] * len(token_ids)
+            # labels = to_categorical(label2id.get(input_label), num_labels)
             labels = [label2id.get(input_label)]
             batch_token_ids.append(token_ids)
             batch_segment_ids.append(segment_ids)
@@ -80,33 +83,6 @@ class data_generator(DataGenerator):
                 batch_labels = sequence_padding(batch_labels)
                 yield [batch_token_ids, batch_segment_ids], batch_labels
                 batch_token_ids, batch_segment_ids, batch_labels = [], [], []
-
-
-def kl_for_log_probs(log_p, log_q):
-    log_p_n = K.eval(log_p)
-    log_q_n = K.eval(log_q)
-    KL = stats.entropy(log_p_n, log_q_n, axis=-1)
-    kl = K.mean(K.constant(KL), axis=0)
-    return kl
-
-
-def cross_entropy(y_true, y_pred):
-    """计算fast_bert的loss
-    """
-    # if not isinstance(y_true, list):
-    #     # 如果是正常训练
-    cross_entropy = K.sparse_categorical_crossentropy(y_true, y_pred)
-    # else:
-    #     # 如果是蒸馏
-    #     teacher_probs = K.softmax(y_true[-1])
-    #     loss = 0
-    #     for i in range(len(y_true) - 1):
-    #         student_logits = y_true[i+1]
-    #         # student_probs = K.log(K.softmax(student_logits))
-    #         student_probs = tf.nn.log_softmax(student_logits, axis=-1)
-    #         # 需要实现连续分布的KL散度
-    #         loss += kl_for_log_probs(student_probs, teacher_probs)
-    return cross_entropy
 
 
 tokenizer = FullTokenizer(vocab_file=dict_path)
@@ -133,26 +109,26 @@ output = Dense(
 
 model = Model(fast_bert.model.input, output)
 
-# model = Model(fast_bert.input, fast_bert.output)
+# model = Model(fast_bert.model.input, fast_bert.output)
 model.summary()
 
 model.compile(
-    loss=cross_entropy,
+    # 输出结果是求平均后的结果
+    loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=False),
     # loss='sparse_categorical_crossentropy',
     optimizer=Adam(learning_rate),
-    # metrics=['sparse_categorical_accuracy'],
-    # metrics=[cross_entropy],
+    metrics=['sparse_categorical_accuracy'],
 )
 
+# model.compile(loss='categorical_crossentropy', optimizer=Adam(learning_rate))
 
 def recognize(text, eval_model):
     tokens = tokenizer.tokenize(text)
 
     input_ids = tokenizer.convert_tokens_to_ids(tokens)
     segment_ids = [0] * len(input_ids)
-    # x = model.predict([input_ids, segment_ids])
-    output = eval_model.predict([input_ids, segment_ids])[0]
-    label_ret = convert_id_to_label(output)
+    output = eval_model.predict([[input_ids], [segment_ids]])[0].argmax()
+    label_ret = id2label[output]
     return label_ret
 
 

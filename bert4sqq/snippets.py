@@ -6,6 +6,7 @@ from __future__ import print_function
 # import keras
 import six
 import numpy as np
+import re
 
 # six.PY2 返回一个表示当前运行环境是否为python2的boolean值
 # six.PY3 返回一个表示当前运行环境是否为python3的boolean值
@@ -21,6 +22,31 @@ def is_string(s):
     """判断是否是字符串
     """
     return isinstance(s, basestring)
+
+
+def strQ2B(ustring):
+    """全角符号转对应的半角符号
+    """
+    rstring = ''
+    for uchar in ustring:
+        inside_code = ord(uchar)
+        # 全角空格直接转换
+        if inside_code == 12288:
+            inside_code = 32
+        # 全角字符（除空格）根据关系转化
+        elif (inside_code >= 65281 and inside_code <= 65374):
+            inside_code -= 65248
+        rstring += unichr(inside_code)
+    return rstring
+
+
+def string_matching(s, keywords):
+    """判断s是否至少包含keywords中的至少一个字符串
+    """
+    for k in keywords:
+        if re.search(k, s):
+            return True
+    return False
 
 
 def to_array(*args):
@@ -122,6 +148,14 @@ class open:
     def __exit__(self, type, value, tb):
         self.close()
 
+def is_one_of(x, ys):
+    """判断x是否在ys之中
+    等价于x in ys，但有些情况下x in ys会报错
+    """
+    for y in ys:
+        if x is y:
+            return True
+    return False
 
 class DataGenerator(object):
     """数据生成器模版
@@ -206,6 +240,43 @@ def sequence_padding(inputs, length=None, padding=0, mode='post'):
         outputs.append(x)
 
     return np.array(outputs)
+
+
+def insert_arguments(**arguments):
+    """装饰器，为类方法增加参数
+    （主要用于类的__init__方法）
+    """
+    def actual_decorator(func):
+        def new_func(self, *args, **kwargs):
+            for k, v in arguments.items():
+                if k in kwargs:
+                    v = kwargs.pop(k)
+                setattr(self, k, v)
+            return func(self, *args, **kwargs)
+
+        return new_func
+
+    return actual_decorator
+
+
+def delete_arguments(*arguments):
+    """装饰器，为类方法删除参数
+    （主要用于类的__init__方法）
+    """
+    def actual_decorator(func):
+        def new_func(self, *args, **kwargs):
+            for k in arguments:
+                if k in kwargs:
+                    raise TypeError(
+                        '%s got an unexpected keyword argument \'%s\'' %
+                        (self.__class__.__name__, k)
+                    )
+            return func(self, *args, **kwargs)
+
+        return new_func
+
+    return actual_decorator
+
 
 if __name__ == "__main__":
     with open('../t.txt', 'w', encoding='utf-8') as writer:

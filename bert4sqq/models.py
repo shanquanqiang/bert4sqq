@@ -1037,29 +1037,29 @@ class FAST_BERT(Transformer):
             layer_trainable=layer_trainable
         )
 
-        x = self.apply(
-            inputs=x,
-            layer=Dropout,
-            rate=self.dropout_rate,
-            name='%s-Dropout' % cla_attention_name,
-            layer_trainable=layer_trainable
-        )
-
-        x = self.apply(
-            inputs=[xi, x], layer=Add, name='%s-Add' % cla_attention_name,
-            layer_trainable=layer_trainable
-        )
-
-        x = self.apply(
-            inputs=self.simplify([x, z]),
-            layer=LayerNormalization,
-            conditional=(z is not None),
-            hidden_units=self.layer_norm_conds[1],
-            hidden_activation=self.layer_norm_conds[2],
-            hidden_initializer=self.initializer,
-            name='%s-Norm' % cla_attention_name,
-            layer_trainable=layer_trainable
-        )
+        # x = self.apply(
+        #     inputs=x,
+        #     layer=Dropout,
+        #     rate=self.dropout_rate,
+        #     name='%s-Dropout' % cla_attention_name,
+        #     layer_trainable=layer_trainable
+        # )
+        #
+        # x = self.apply(
+        #     inputs=[xi, x], layer=Add, name='%s-Add' % cla_attention_name,
+        #     layer_trainable=layer_trainable
+        # )
+        #
+        # x = self.apply(
+        #     inputs=self.simplify([x, z]),
+        #     layer=LayerNormalization,
+        #     conditional=(z is not None),
+        #     hidden_units=self.layer_norm_conds[1],
+        #     hidden_activation=self.layer_norm_conds[2],
+        #     hidden_initializer=self.initializer,
+        #     name='%s-Norm' % cla_attention_name,
+        #     layer_trainable=layer_trainable
+        # )
 
         if self.pooling == "mean":
             # 这里可能有问题
@@ -1091,16 +1091,16 @@ class FAST_BERT(Transformer):
             layer_trainable=layer_trainable
         )
 
-        x = self.apply(
-            inputs=self.simplify([x, z]),
-            layer=LayerNormalization,
-            conditional=(z is not None),
-            hidden_units=self.layer_norm_conds[1],
-            hidden_activation=self.layer_norm_conds[2],
-            hidden_initializer=self.initializer,
-            name='Classifier-%s-Norm' % cla_attention_name,
-            layer_trainable=layer_trainable
-        )
+        # x = self.apply(
+        #     inputs=self.simplify([x, z]),
+        #     layer=LayerNormalization,
+        #     conditional=(z is not None),
+        #     hidden_units=self.layer_norm_conds[1],
+        #     hidden_activation=self.layer_norm_conds[2],
+        #     hidden_initializer=self.initializer,
+        #     name='Classifier-%s-Norm' % cla_attention_name,
+        #     layer_trainable=layer_trainable
+        # )
 
         outputs.append(x)
 
