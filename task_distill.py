@@ -14,7 +14,6 @@ import tensorflow as tf
 from keras.models import Model
 from keras.optimizers import Adam
 from bert4sqq.utils import get_labels2id, load_data
-import os
 import random
 from keras.callbacks import ModelCheckpoint
 
@@ -28,7 +27,6 @@ checkpoint_save_path = "./output/distill-{epoch:04d}.ckpt"
 labels_dir = './output'
 file_name = 'train-domain.txt'
 
-maxlen = 512
 batch_size = 8
 epochs = 1
 learning_rate = 1e-5  # bert_layers越小，学习率应该要越大
